@@ -45,3 +45,56 @@ def _mix(v, a, b, c, d, x, y):
     v[c] = (v[c] + v[d]) & _MASK
     v[b] = _ror(v[b] ^ v[c], 7)
 
+
+def _compress(state, block, counter, null_counter=False):
+    words = struct.unpack('>16I', block)
+    # The four salt words are zero in this byte-oriented implementation.
+    v = list(state) + list(_C[:8])
+    if not null_counter:
+        low, high = counter & _MASK, 0
+        v[12] ^= low
+        v[13] ^= low
+        v[14] ^= high
+        v[15] ^= high
+    lanes = (
+        (0, 4, 8, 12), (1, 5, 9, 13), (2, 6, 10, 14), (3, 7, 11, 15),
+        (0, 5, 10, 15), (1, 6, 11, 12), (2, 7, 8, 13), (3, 4, 9, 14),
+    )
+    for round_number in range(14):
+        permutation = _SIGMA[round_number % 10]
+        for pair, lane in enumerate(lanes):
+            x, y = permutation[2 * pair:2 * pair + 2]
+            _mix(v, *lane, words[x] ^ _C[y], words[y] ^ _C[x])
+    return [state[i] ^ v[i] ^ v[i + 8] for i in range(8)]
+
+
+def digest(data):
+    data = bytes(data)
+    count = len(data)
+    state = list(_IV)
+    if count >= 64:
+        raise NotImplementedError('Multi-block messages are not implemented yet')
+    buffer = data
+    if len(buffer) > 54:
+        raise NotImplementedError('This final block size is not implemented yet')
+    counter = count * 8
+    size = len(buffer)
+    length = struct.pack('>Q', counter)
+    if size == 55:
+        # The initial padding bit and the 256-bit domain marker share a byte.
+        tail = buffer + b'\x81' + length
+        state = _compress(state, tail, counter)
+    elif size < 55:
+        tail = buffer + b'\x80' + b'\x00' * (54 - size) + b'\x01' + length
+        state = _compress(state, tail, counter, null_counter=(size == 0))
+    else:
+        tail = buffer + b'\x80' + b'\x00' * (63 - size)
+        state = _compress(state, tail, counter)
+        # This second block contains no message bits: suppress the counter.
+        tail = b'\x00' * 55 + b'\x01' + length
+        state = _compress(state, tail, counter, null_counter=True)
+    return struct.pack('>8I', *state)
+
+
+def hexdigest(data):
+    return digest(data).hex()
