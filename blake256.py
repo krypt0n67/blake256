@@ -75,7 +75,7 @@ def digest(data):
     if count >= 64:
         raise NotImplementedError('Multi-block messages are not implemented yet')
     buffer = data
-    if len(buffer) > 54:
+    if len(buffer) > 55:
         raise NotImplementedError('This final block size is not implemented yet')
     counter = count * 8
     size = len(buffer)
