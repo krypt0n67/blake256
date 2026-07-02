@@ -72,9 +72,10 @@ def digest(data):
     data = bytes(data)
     count = len(data)
     state = list(_IV)
-    if count >= 64:
-        raise NotImplementedError('Multi-block messages are not implemented yet')
-    buffer = data
+    end = len(data) - len(data) % 64
+    for offset in range(0, end, 64):
+        state = _compress(state, data[offset:offset + 64], (offset + 64) * 8)
+    buffer = data[end:]
     if len(buffer) > 55:
         raise NotImplementedError('This final block size is not implemented yet')
     counter = count * 8
