@@ -76,8 +76,6 @@ def digest(data):
     for offset in range(0, end, 64):
         state = _compress(state, data[offset:offset + 64], (offset + 64) * 8)
     buffer = data[end:]
-    if len(buffer) > 55:
-        raise NotImplementedError('This final block size is not implemented yet')
     counter = count * 8
     size = len(buffer)
     length = struct.pack('>Q', counter)
@@ -93,7 +91,7 @@ def digest(data):
         state = _compress(state, tail, counter)
         # This second block contains no message bits: suppress the counter.
         tail = b'\x00' * 55 + b'\x01' + length
-        state = _compress(state, tail, counter, null_counter=True)
+        state = _compress(state, tail, counter, null_counter=False)
     return struct.pack('>8I', *state)
 
 
