@@ -68,32 +68,75 @@ def _compress(state, block, counter, null_counter=False):
     return [state[i] ^ v[i] ^ v[i + 8] for i in range(8)]
 
 
+class BLAKE256:
+    """Incremental original BLAKE-256 with non-destructive digest snapshots."""
+
+    name = 'blake256'
+    block_size = 64
+    digest_size = 32
+
+    def __init__(self, data=b''):
+        self._state = list(_IV)
+        self._buffer = b''
+        self._count = 0
+        self.update(data)
+
+    def update(self, data):
+        data = bytes(data)
+        if not data:
+            self._buffer = b''
+            return
+        if self._count + len(data) >= 1 << 61:
+            raise OverflowError('BLAKE-256 messages must be shorter than 2**64 bits')
+        processed = self._count - len(self._buffer)
+        self._count += len(data)
+        data = self._buffer + data
+        end = len(data) - len(data) % self.block_size
+        for offset in range(0, end, self.block_size):
+            counter = (processed + offset + self.block_size) * 8
+            self._state = _compress(self._state, data[offset:offset + 64], counter)
+        self._buffer = data[end:]
+
+    def copy(self):
+        clone = object.__new__(type(self))
+        clone._state = self._state.copy()
+        clone._buffer = self._buffer
+        clone._count = self._count
+        return clone
+
+    def digest(self):
+        state = self._state.copy()
+        counter = self._count * 8
+        size = len(self._buffer)
+        length = struct.pack('>Q', counter)
+        if size == 55:
+            # The initial padding bit and the 256-bit domain marker share a byte.
+            tail = self._buffer + b'\x81' + length
+            state = _compress(state, tail, counter)
+        elif size < 55:
+            tail = self._buffer + b'\x80' + b'\x00' * (54 - size) + b'\x01' + length
+            state = _compress(state, tail, counter, null_counter=(size == 0))
+        else:
+            tail = self._buffer + b'\x80' + b'\x00' * (63 - size)
+            state = _compress(state, tail, counter)
+            # This second block contains no message bits: suppress the counter.
+            tail = b'\x00' * 55 + b'\x01' + length
+            state = _compress(state, tail, counter, null_counter=True)
+        return struct.pack('>8I', *state)
+
+    def hexdigest(self):
+        return self.digest().hex()
+
+
+def blake256(data=b''):
+    return BLAKE256(data)
+
+
 def digest(data):
-    data = bytes(data)
-    count = len(data)
-    state = list(_IV)
-    end = len(data) - len(data) % 64
-    for offset in range(0, end, 64):
-        state = _compress(state, data[offset:offset + 64], (offset + 64) * 8)
-    buffer = data[end:]
-    counter = count * 8
-    size = len(buffer)
-    length = struct.pack('>Q', counter)
-    if size == 55:
-        # The initial padding bit and the 256-bit domain marker share a byte.
-        tail = buffer + b'\x81' + length
-        state = _compress(state, tail, counter)
-    elif size < 55:
-        tail = buffer + b'\x80' + b'\x00' * (54 - size) + b'\x01' + length
-        state = _compress(state, tail, counter, null_counter=(size == 0))
-    else:
-        tail = buffer + b'\x80' + b'\x00' * (63 - size)
-        state = _compress(state, tail, counter)
-        # This second block contains no message bits: suppress the counter.
-        tail = b'\x00' * 55 + b'\x01' + length
-        state = _compress(state, tail, counter, null_counter=True)
-    return struct.pack('>8I', *state)
+    """One-shot byte digest, retained from the original API."""
+    return BLAKE256(data).digest()
 
 
 def hexdigest(data):
     return digest(data).hex()
+
