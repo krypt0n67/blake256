@@ -83,9 +83,6 @@ class BLAKE256:
 
     def update(self, data):
         data = bytes(data)
-        if not data:
-            self._buffer = b''
-            return
         if self._count + len(data) >= 1 << 61:
             raise OverflowError('BLAKE-256 messages must be shorter than 2**64 bits')
         processed = self._count - len(self._buffer)
