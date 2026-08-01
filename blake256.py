@@ -51,7 +51,7 @@ def _compress(state, block, counter, null_counter=False):
     # The four salt words are zero in this byte-oriented implementation.
     v = list(state) + list(_C[:8])
     if not null_counter:
-        low, high = counter & _MASK, 0
+        low, high = counter & _MASK, (counter >> 32) & _MASK
         v[12] ^= low
         v[13] ^= low
         v[14] ^= high
