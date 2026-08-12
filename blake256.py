@@ -82,6 +82,8 @@ class BLAKE256:
         self.update(data)
 
     def update(self, data):
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError('data must be bytes, bytearray or memoryview')
         data = bytes(data)
         if self._count + len(data) >= 1 << 61:
             raise OverflowError('BLAKE-256 messages must be shorter than 2**64 bits')
